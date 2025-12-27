@@ -22,7 +22,7 @@ jobs:
           issue_number: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
       - name: Annotate issue
         id: annotate
-        uses: PLASMAchicken/GTNHIssueHelper@latest
+        uses: PLASMAchicken/GTNHIssueHelper@master
         with:
           formdata: ${{ steps.parse.outputs.payload }}
       - name: Post comment
