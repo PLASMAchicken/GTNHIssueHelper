@@ -324,8 +324,7 @@ class Helper:
                 ret.append(CrashReport(f'inline {len(ret) + 1}', cr_data[istart:iend]))
                 istart = cr_data.find('---- Minecraft Crash Report ----', istart)
         all_urls = set()
-        for x in re.findall(r'(https://\S+)|\[[^]]+]\((https://\S+)\)', cr_data):
-            url = x[0] or x[1]
+        for url in re.findall(r'https?://[^\s<>"\')]+', cr_data):
             if url in all_urls:
                 gha_utils.debug(f'Duplicate url: {url}')
                 continue
