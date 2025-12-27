@@ -313,8 +313,8 @@ class Helper:
 
     def _search_section(self, section_key: str) -> list[CrashReport]:
         ret = []
-        gha_utils.debug(f"Searching section {section_key!r}, length={len(cr_data)}")
         cr_data = self._issue_form_data.get(section_key, '')
+        gha_utils.debug(f"Searching section {section_key!r}, length={len(cr_data)}")
         if '---- Minecraft Crash Report ----' in cr_data and 'Is Modded' in cr_data:
             istart = cr_data.find('---- Minecraft Crash Report ----')
             while istart != -1:
