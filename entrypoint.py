@@ -315,6 +315,8 @@ class Helper:
         ret = []
         cr_data = self._issue_form_data.get(section_key, '')
         gha_utils.notice(f"Searching section {section_key!r}, length={len(cr_data)}")
+        gha_utils.notice(cr_data)
+        
         if '---- Minecraft Crash Report ----' in cr_data and 'Is Modded' in cr_data:
             istart = cr_data.find('---- Minecraft Crash Report ----')
             while istart != -1:
