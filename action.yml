@@ -9,9 +9,8 @@ inputs:
     required: false
     default: "Crash Report"
 outputs:
-  comments:
-    description: "Comment to post on issue."
-    value: ${{ steps.run.outputs.comments }}
+  comment:
+    description: "Comment to be sent to issue. Can be empty if nothing worthwhile is found."
 
 runs:
   using: composite
