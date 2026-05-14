@@ -9,9 +9,26 @@ inputs:
     required: false
     default: "Crash Report"
 outputs:
-  comment:
-    description: "Comment to be sent to issue. Can be empty if nothing worthwhile is found."
-runs:
-  using: docker
-  image: Dockerfile
+  comments:
+    description: "Comment to post on issue."
+    value: ${{ steps.run.outputs.comments }}
 
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: pip                              # pip deps cached across runs by requirements hash
+
+    - name: Install dependencies
+      shell: bash
+      run: pip install -r ${{ github.action_path }}/requirements.txt
+
+    - name: Run
+      id: run
+      shell: bash
+      env:
+        INPUT_FORMDATA: ${{ inputs.formdata }}  # github_action_utils reads INPUT_* vars
+        INPUT_SECTIONS: ${{ inputs.sections }}
+      run: python ${{ github.action_path }}/entrypoint.py
