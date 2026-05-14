@@ -314,9 +314,6 @@ class Helper:
     def _search_section(self, section_key: str) -> list[CrashReport]:
         ret = []
         cr_data = self._issue_form_data.get(section_key, '')
-        gha_utils.notice(f"Searching section {section_key!r}, length={len(cr_data)}")
-        gha_utils.notice(cr_data)
-        
         if '---- Minecraft Crash Report ----' in cr_data and 'Is Modded' in cr_data:
             istart = cr_data.find('---- Minecraft Crash Report ----')
             while istart != -1:
@@ -328,7 +325,6 @@ class Helper:
                 istart = cr_data.find('---- Minecraft Crash Report ----', istart)
         all_urls = set()
         for url in re.findall(r'https?://[^\s<>"\')]+', cr_data):
-            gha_utils.notice(f"Checking ", url)
             if url in all_urls:
                 gha_utils.debug(f'Duplicate url: {url}')
                 continue
