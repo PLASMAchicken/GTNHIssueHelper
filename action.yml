@@ -18,7 +18,8 @@ runs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        cache: pip                              # pip deps cached across runs by requirements hash
+        cache: pip
+        cache-dependency-path: ${{ github.action_path }}/requirements.txt
 
     - name: Install dependencies
       shell: bash
