@@ -328,7 +328,7 @@ class Helper:
                 istart = cr_data.find('---- Minecraft Crash Report ----', istart)
         all_urls = set()
         for url in re.findall(r'https?://[^\s<>"\')]+', cr_data):
-            gha_utils.notice(f"Checking ", url)
+            gha_utils.notice(f"Checking {url}")
             if url in all_urls:
                 gha_utils.debug(f'Duplicate url: {url}')
                 continue
@@ -385,6 +385,7 @@ class Helper:
                 # probably a fml-client-latest.log
                 gha_utils.notice(f'Found potential log in {url}. Parsing not implemented for now.')
                 continue
+            gha_utils.warning(f'Downloaded {url} but content not recognized (first 100 chars: {content[:100]!r})')
         return list(ret)
 
     def get_mod_list(self, side: Side) -> list[Tuple[GTNHModInfo, GTNHVersion]]:
