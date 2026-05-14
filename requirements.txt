@@ -1,0 +1,5 @@
+github-action-utils~=1.1.0
+requests<3
+urllib3<2
+packaging>=23.0
+git+https://github.com/GTNewHorizons/DreamAssemblerXXL.git
