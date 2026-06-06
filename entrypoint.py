@@ -417,18 +417,21 @@ class Helper:
                 self._out.append(f'Failed to download url: {download_url}. Original file link: {url}')
                 continue
             content = req.text
-            if content.startswith('---- Minecraft Crash Report ----'):
+            if content.startswith(CRASH_REPORT_MARKER):
                 ret.append(CrashReport(url, content))
                 continue
-            if re.match(r'\[\d{2}:\d{2}:\d{2}] \[[^/]+/(INFO|DEBUG|TRACE|WARN|ERROR)] \[.+/.+]:', content):
-                # fml-client-latest.log / fml-server-latest.log. FML usually dumps the full
-                # crash report into the log, so search for it and analyze it like a normal CR.
+            if CRASH_REPORT_MARKER in content:
+                # A crash report embedded in a larger file, e.g. an fml-client-latest.log: FML
+                # dumps the full report into the log. Detecting it by the marker (rather than by
+                # the log line format) is robust to the many logger shapes like [FML/].
                 embedded = list(_iter_embedded_crash_reports(content, url))
                 if embedded:
-                    gha_utils.notice(f'Found {len(embedded)} embedded crash report(s) in log {url}.')
+                    gha_utils.notice(f'Found {len(embedded)} embedded crash report(s) in {url}.')
                     ret.extend(embedded)
-                else:
-                    gha_utils.notice(f'Found log in {url} but no embedded crash report to analyze.')
+                    continue
+            if re.match(r'\[\d{2}:\d{2}:\d{2}] \[[^/]+/(INFO|DEBUG|TRACE|WARN|ERROR)] \[[^\]]+]:', content):
+                # looks like an fml log, but with no crash report dumped into it
+                gha_utils.notice(f'Found log in {url} but no embedded crash report to analyze.')
                 continue
         return list(ret)
 
