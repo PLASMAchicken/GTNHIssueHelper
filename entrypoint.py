@@ -471,6 +471,10 @@ class Helper:
                 yield e.filename
 
     def analyze(self, cr: CrashReport):
+        # Lead with a blank line: it closes any preceding HTML block (e.g. the previous
+        # report's <details>) so this Markdown heading renders instead of being swallowed
+        # as raw text inside that block.
+        self._out.append('')
         self._out.append(f'## Primitive Automated Analysis of Crash Report')
         self._out.append(cr.url)
 
@@ -538,6 +542,7 @@ class Helper:
                     continue
             extra = len(self.crash_reports) - self.MAX_ANALYZED_REPORTS
             if extra > 0:
+                self._out.append('')
                 self._out.append(f'Additional {extra} crash report(s) found in file, not analyzed.')
             if 'GITHUB_OUTPUT' in os.environ:
                 with open(os.environ["GITHUB_OUTPUT"], "a") as f:
