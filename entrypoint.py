@@ -64,11 +64,23 @@ class CrashReport:
 
     @cached_property
     def main_stack_trace(self) -> list[str]:
+        lines = self.content.splitlines()
+        # The throwable starts right after the "Description:" line. Anchoring on it (instead
+        # of a fixed line offset) keeps this working when the report is embedded in an fml log,
+        # where the blank lines of an on-disk crash report are stripped. Fall back to the old
+        # fixed offset if there is no Description line (e.g. an oddly truncated report).
+        start = next((i + 1 for i, l in enumerate(lines) if l.startswith('Description:')), 6)
         ret = []
-        for line in self.content.splitlines()[6:]:
+        for line in lines[start:]:
             line = line.strip()
             if not line:
-                return ret
+                # a blank line ends the trace, but skip any blanks before it begins
+                if ret:
+                    break
+                continue
+            # the report body resumes after the trace; stop before it
+            if line.startswith('A detailed walkthrough of the error') or line == '-- System Details --':
+                break
             # whitespace is removed by strip(), making it rather hard to read
             if line.startswith('at '):
                 ret.append('  ' + line)
@@ -153,6 +165,37 @@ class CrashReport:
     def from_url(cls, url: str):
         if re.fullmatch(r'https://github.com/[^/]+/GT-New-Horizons-Modpack/files/.+', url):
             return cls(url, requests.get(url).text)
+
+
+CRASH_REPORT_MARKER = '---- Minecraft Crash Report ----'
+
+# A single fml-*-latest.log line prefix, e.g. "[12:34:56] [Client thread/INFO] [STDOUT/]: "
+_LOG_LINE_PREFIX = re.compile(r'^\[\d{2}:\d{2}:\d{2}] \[[^\]]+] \[[^\]]+]:\s?')
+
+
+def _iter_embedded_crash_reports(content: str, url: str) -> Generator[CrashReport, None, None]:
+    """Yield a CrashReport for every crash report embedded in an fml-*-latest.log.
+
+    GTNH dumps the full crash report into the log as plain (unprefixed) lines, so a block
+    runs from its '---- Minecraft Crash Report ----' marker up to the next ordinary log line
+    (or the start of the next embedded report). A single log can hold more than one crash.
+    """
+    lines = content.splitlines()
+    blocks = []
+    i = 0
+    while i < len(lines):
+        if CRASH_REPORT_MARKER not in lines[i]:
+            i += 1
+            continue
+        start = i
+        i += 1
+        while i < len(lines) and CRASH_REPORT_MARKER not in lines[i] \
+                and not _LOG_LINE_PREFIX.match(lines[i]):
+            i += 1
+        blocks.append('\n'.join(lines[start:i]))
+    for n, block in enumerate(blocks, 1):
+        label = url if len(blocks) == 1 else f'{url} (crash report {n})'
+        yield CrashReport(label, block)
 
 
 def _coremod_filename_convention_modid(match):
@@ -322,7 +365,7 @@ class Helper:
                 if iend == -1:
                     iend = len(cr_data)
                 ret.append(CrashReport(f'inline {len(ret) + 1}', cr_data[istart:iend]))
-                istart = cr_data.find('---- Minecraft Crash Report ----', istart)
+                istart = cr_data.find('---- Minecraft Crash Report ----', iend)
         all_urls = set()
         for url in re.findall(r'https?://[^\s<>"\')]+', cr_data):
             if url in all_urls:
@@ -378,8 +421,14 @@ class Helper:
                 ret.append(CrashReport(url, content))
                 continue
             if re.match(r'\[\d{2}:\d{2}:\d{2}] \[[^/]+/(INFO|DEBUG|TRACE|WARN|ERROR)] \[.+/.+]:', content):
-                # probably a fml-client-latest.log
-                gha_utils.notice(f'Found potential log in {url}. Parsing not implemented for now.')
+                # fml-client-latest.log / fml-server-latest.log. FML usually dumps the full
+                # crash report into the log, so search for it and analyze it like a normal CR.
+                embedded = list(_iter_embedded_crash_reports(content, url))
+                if embedded:
+                    gha_utils.notice(f'Found {len(embedded)} embedded crash report(s) in log {url}.')
+                    ret.extend(embedded)
+                else:
+                    gha_utils.notice(f'Found log in {url} but no embedded crash report to analyze.')
                 continue
         return list(ret)
 
@@ -469,17 +518,24 @@ class Helper:
         # force a newline between each section
         self._out.append('')
 
+    # A file (e.g. a full fml log) can contain a crash dumped on every retry. Analyze the first
+    # few and just tally the rest so the comment stays readable.
+    MAX_ANALYZED_REPORTS = 5
+
     def main(self):
         with gha_utils.group('Checking crash report'):
             if not self.crash_reports:
                 return
             self._out.append(f'Found {len(self.crash_reports)} linked crash report(s)')
-            for i, cr in enumerate(self.crash_reports):
+            for i, cr in enumerate(self.crash_reports[:self.MAX_ANALYZED_REPORTS]):
                 try:
                     self.analyze(cr)
                 except Exception:
                     logging.error('error analyzing cr %s', i, exc_info=True)
                     continue
+            extra = len(self.crash_reports) - self.MAX_ANALYZED_REPORTS
+            if extra > 0:
+                self._out.append(f'Additional {extra} crash report(s) found in file, not analyzed.')
             if 'GITHUB_OUTPUT' in os.environ:
                 with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                     f.write('comments<<__XSAJXAXJIO_EOF\n')
