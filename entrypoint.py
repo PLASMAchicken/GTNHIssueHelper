@@ -198,6 +198,19 @@ def _iter_embedded_crash_reports(content: str, url: str) -> Generator[CrashRepor
         yield CrashReport(label, block)
 
 
+def normalize_filename(filename: str) -> str:
+    """Canonicalize a mod filename for set-comparison purposes.
+
+    Manifest filenames may use '+' as a separator (build metadata, e.g.
+    'UniLib-1.1.1+1.7.10-forge.jar') or carry a leading '+' (e.g.
+    '+unimixins-all-1.7.10-0.1.23.jar'), while the same file on disk shows up in
+    the crash report with those '+' rendered as spaces and no leading '+'. Without
+    normalization these identical files appear as a spurious missing/added pair.
+    Replacing '+' with a space and stripping collapses both forms to one.
+    """
+    return filename.replace('+', ' ').strip()
+
+
 def _coremod_filename_convention_modid(match):
     return f'{match.group("modid")}-{match.group("version")}.jar'
 
@@ -508,10 +521,14 @@ class Helper:
             gha_utils.warning(f'Failed to get mod list for side {cr.side}')
             return
         cr_mods = {mod.filename: mod for mod in cr.mod_list}
-        cr_mods_set = set(cr_mods.keys())
         base_mods_set = self.get_mod_filename_set(cr.side)
-        missing = self._filter_missing(cr, base_mods_set - cr_mods_set)
-        added = cr_mods_set - base_mods_set
+        # Compare on normalized names (so '+' vs space and leading '+' don't create
+        # spurious diffs) but keep the originals around for display.
+        cr_by_norm = {normalize_filename(f): f for f in cr_mods}
+        base_by_norm = {normalize_filename(f): f for f in base_mods_set}
+        missing = self._filter_missing(
+            cr, sorted(base_by_norm[n] for n in base_by_norm.keys() - cr_by_norm.keys()))
+        added = sorted(cr_by_norm[n] for n in cr_by_norm.keys() - base_by_norm.keys())
         if missing:
             self._out.append(f'<details><summary>Missing {len(missing)} mods</summary><ul>')
             for filename in missing:
