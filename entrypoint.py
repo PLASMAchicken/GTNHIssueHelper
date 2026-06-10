@@ -198,19 +198,6 @@ def _iter_embedded_crash_reports(content: str, url: str) -> Generator[CrashRepor
         yield CrashReport(label, block)
 
 
-def normalize_filename(filename: str) -> str:
-    """Canonicalize a mod filename for set-comparison purposes.
-
-    Manifest filenames may use '+' as a separator (build metadata, e.g.
-    'UniLib-1.1.1+1.7.10-forge.jar') or carry a leading '+' (e.g.
-    '+unimixins-all-1.7.10-0.1.23.jar'), while the same file on disk shows up in
-    the crash report with those '+' rendered as spaces and no leading '+'. Without
-    normalization these identical files appear as a spurious missing/added pair.
-    Replacing '+' with a space and stripping collapses both forms to one.
-    """
-    return filename.replace('+', ' ').strip()
-
-
 def _coremod_filename_convention_modid(match):
     return f'{match.group("modid")}-{match.group("version")}.jar'
 
@@ -260,10 +247,21 @@ class InstalledMod:
         # some mods have different filename between assets json and when downloaded by curse/deploader of curse release
         # replace it with the one in manifest
         new_name = filename
-        if filename.startswith('Thaumic-Machina'):
-            new_name = filename.replace('-', ' ', 1)
-        if re.fullmatch(r'CraftPresence-.+\+1\.7\.10\.jar', filename):
-            new_name = re.fullmatch(r'CraftPresence-(.+)\+1\.7\.10\.jar', filename).expand(r'CraftPresence-\1-1.7.10.jar')
+        if new_name.startswith('Thaumic-Machina'):
+            # the manifest uses a space where the curse file uses '-'
+            new_name = new_name.replace('-', ' ', 1)
+        elif new_name.startswith('unimixins'):
+            # the manifest carries a leading '+' that the curse file drops
+            new_name = '+' + new_name
+        elif ' ' in new_name:
+            # curse renders the manifest's '+' separator as a space, e.g.
+            # 'CraftPresence-2.6.2 1.7.10-forge.jar' -> 'CraftPresence-2.6.2+1.7.10-forge.jar'
+            # (also covers UniLib and any similarly-named mod)
+            new_name = new_name.replace(' ', '+')
+        # legacy CraftPresence curse name used '+1.7.10.jar' where the manifest used '-1.7.10.jar'
+        legacy_craftpresence = re.fullmatch(r'CraftPresence-(.+)\+1\.7\.10\.jar', new_name)
+        if legacy_craftpresence:
+            new_name = legacy_craftpresence.expand(r'CraftPresence-\1-1.7.10.jar')
         if new_name != filename:
             gha_utils.warning(f'Replaced curse file name {filename} with {new_name}')
         return new_name
@@ -521,14 +519,10 @@ class Helper:
             gha_utils.warning(f'Failed to get mod list for side {cr.side}')
             return
         cr_mods = {mod.filename: mod for mod in cr.mod_list}
+        cr_mods_set = set(cr_mods.keys())
         base_mods_set = self.get_mod_filename_set(cr.side)
-        # Compare on normalized names (so '+' vs space and leading '+' don't create
-        # spurious diffs) but keep the originals around for display.
-        cr_by_norm = {normalize_filename(f): f for f in cr_mods}
-        base_by_norm = {normalize_filename(f): f for f in base_mods_set}
-        missing = self._filter_missing(
-            cr, sorted(base_by_norm[n] for n in base_by_norm.keys() - cr_by_norm.keys()))
-        added = sorted(cr_by_norm[n] for n in cr_by_norm.keys() - base_by_norm.keys())
+        missing = self._filter_missing(cr, base_mods_set - cr_mods_set)
+        added = cr_mods_set - base_mods_set
         if missing:
             self._out.append(f'<details><summary>Missing {len(missing)} mods</summary><ul>')
             for filename in missing:
